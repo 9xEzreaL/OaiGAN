@@ -13,12 +13,13 @@ dataset/
 logs/
 logs2/
 outputs/
-outputs/results/
+outputs/*
+outputs/results/*
 outputs/XXX/
 result/
 Untitled/
 notinuse/
-submodels/
+submodels/*
 build/
 develop-eggs/
 dist/
