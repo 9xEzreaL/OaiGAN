@@ -116,7 +116,7 @@ class Discriminator(nn.Module):
         layer3 = []
         last = []
 
-        layer1.append(SpectralNorm(nn.Conv2d(3*2, conv_dim, 4, 2, 1)))
+        layer1.append(SpectralNorm(nn.Conv2d(5*2, conv_dim, 4, 2, 1)))
         layer1.append(nn.LeakyReLU(0.1))
 
         curr_dim = conv_dim
@@ -129,7 +129,7 @@ class Discriminator(nn.Module):
         layer3.append(nn.LeakyReLU(0.1))
         curr_dim = curr_dim * 2
 
-        if self.imsize == 64:
+        if self.imsize == 256:
             layer4 = []
             layer4.append(SpectralNorm(nn.Conv2d(curr_dim, curr_dim * 2, 4, 2, 1)))
             layer4.append(nn.LeakyReLU(0.1))
@@ -149,14 +149,14 @@ class Discriminator(nn.Module):
         out = self.l1(x)
         out = self.l2(out)
         out = self.l3(out)
-        print(out.shape)  # (B, 256, 16, 16)
+        # print(out.shape)  # (B, 256, 16, 16)
         out, p1 = self.attn1(out)
-        print(out.shape)  # (B, 256, 16, 16)
-        if self.imsize == 64:
+        # print(out.shape)  # (B, 256, 16, 16)
+        if self.imsize == 256:
             out = self.l4(out)
-            print(out.shape)  # (B, 512, 8, 8)
+            # print(out.shape)  # (B, 512, 8, 8)
         out, p2 = self.attn2(out)
-        print(out.shape)  # (B, 512, 8, 8)
+        # print(out.shape)  # (B, 512, 8, 8)
         out = self.last(out)  # (B, 1, 5, 5)
 
         return out.squeeze(), p1, p2

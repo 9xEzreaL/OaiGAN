@@ -14,17 +14,17 @@ from models.AttGAN.nn import LinearBlock, Conv2dBlock, ConvTranspose2dBlock
 MAX_DIM = 64 * 16  # 1024
 
 
-class Generator(nn.Module): #layers was 5
+class Generator(nn.Module): # layers was 5
     def __init__(self, enc_dim=64, enc_layers=5, enc_norm_fn='batchnorm', enc_acti_fn='lrelu',
                  dec_dim=64, dec_layers=5, dec_norm_fn='batchnorm', dec_acti_fn='relu',
-                 n_attrs=1, shortcut_layers=1, inject_layers=0, img_size=128):
+                 n_attrs=1, shortcut_layers=1, inject_layers=0, img_size=128, input_nc= 3, output_nc=3):
         super(Generator, self).__init__()
         self.shortcut_layers = min(shortcut_layers, dec_layers - 1)
         self.inject_layers = min(inject_layers, dec_layers - 1)
         self.f_size = img_size // 2 ** enc_layers  # f_size = 4 for 128x128
 
         layers = []
-        n_in = 3
+        n_in = input_nc
         for i in range(enc_layers):
             n_out = min(enc_dim * 2 ** i, MAX_DIM)
             layers += [Conv2dBlock(
@@ -46,10 +46,9 @@ class Generator(nn.Module): #layers was 5
                 n_in = n_in + n_attrs if self.inject_layers > i else n_in
             else:
                 layers += [ConvTranspose2dBlock(
-                    n_in, 3, (4, 4), stride=2, padding=1, norm_fn='none', acti_fn='tanh'
+                    n_in, output_nc, (4, 4), stride=2, padding=1, norm_fn='none', acti_fn='tanh'
                 )]
         self.dec_layers = nn.ModuleList(layers)
-
     def encode(self, x):
         z = x
         zs = []
@@ -60,6 +59,7 @@ class Generator(nn.Module): #layers was 5
 
     def decode(self, zs, a):
         a_tile = a.view(a.size(0), -1, 1, 1).repeat(1, 1, self.f_size, self.f_size)
+        # print(a_tile.shape, zs[-1].shape)
         z = torch.cat([zs[-1], a_tile], dim=1)
         for i, layer in enumerate(self.dec_layers):
             z = layer(z)

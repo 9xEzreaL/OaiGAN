@@ -8,7 +8,7 @@ from utils.make_config import *
 load_dotenv('.env')
 
 # Arguments
-parser = argparse.ArgumentParser()#add_help=False)
+parser = argparse.ArgumentParser() # add_help=False)
 # Project name
 parser.add_argument('--prj', type=str, default='', help='name of the project')
 parser.add_argument('--engine', dest='engine', type=str, default='mydcgan', help='use which engine')
@@ -19,9 +19,10 @@ parser.add_argument('--direction', type=str, default='a_b', help='a2b or b2a')
 parser.add_argument('--flip', action='store_true', dest='flip', default=False, help='image flip left right')
 parser.add_argument('--resize', type=int, default=0, help='size for resizing before cropping, 0 for no resizing')
 parser.add_argument('--cropsize', type=int, default=256, help='size for cropping, 0 for no crop')
+parser.add_argument('--cart', action='store_true', dest='cartonly')
 # Model
 parser.add_argument('--gan_mode', type=str, default='vanilla', help='gan mode')
-parser.add_argument('--netG', type=str, default='unet_256', help='netG model')
+parser.add_argument('--netG', type=str, default='unet_128', help='netG model')
 parser.add_argument('--mc', action='store_true', dest='mc', default=False, help='monte carlo dropout for pix2pix generator')
 parser.add_argument('--netD', type=str, default='patchgan_16', help='netD model')
 parser.add_argument('--input_nc', type=int, default=3, help='input image channels')
@@ -52,7 +53,7 @@ parser.add_argument('--port', type=str, default='dummy')
 # Model-specific Arguments
 engine = parser.parse_known_args()[0].engine
 GAN = getattr(__import__('engine.' + engine), engine).GAN
-parser = GAN.add_model_specific_args(parser)
+# parser = GAN.add_model_specific_args(parser)
 opt = parser.parse_args()
 
 # Finalize Arguments and create files for logging
@@ -70,12 +71,23 @@ def prepare_log(opt):
 opt = prepare_log(opt)
 
 #  Define Dataset Class
-from dataloader.data_multi import MultiData as Dataset
+if opt.cartonly:
+    from dataloader.data_multi import MultiData as Dataset
+    train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
+                        path=opt.direction,
+                        opt=opt, mode='train')
+    opt.input_nc = train_set.__getitem__(0)[0][0].shape[0] + train_set.__getitem__(0)[0][2].shape[0]
+    opt.output_nc = train_set.__getitem__(0)[0][0].shape[0]
 
-# Load Dataset and DataLoader
-train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
-                    path=opt.direction,
-                    opt=opt, mode='train')
+else:
+    from dataloader.data_multi import MultiData as Dataset
+    # Load Dataset and DataLoader
+    train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
+                        path=opt.direction,
+                        opt=opt, mode='train')
+    opt.input_nc = train_set.__getitem__(0)[0][0].shape[0]
+    opt.output_nc = train_set.__getitem__(0)[0][0].shape[0]
+
 train_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batch_size, shuffle=True)
 
 #  Pytorch Lightning Module
@@ -89,13 +101,13 @@ net = GAN(hparams=opt, train_loader=None,
           test_loader=None, checkpoints=checkpoints)
 trainer = pl.Trainer(gpus=[0],  # distributed_backend='ddp',
                      max_epochs=opt.n_epochs, progress_bar_refresh_rate=20, logger=logger)
-trainer.fit(net, train_loader)#, test_loader)  # test loader not used during training
+trainer.fit(net, train_loader)  #, test_loader)  # test loader not used during training
 
 
 # Example Usage
-# CUDA_VISIBLE_DEVICES=1 python train.py --dataset TSE_DESS -b 16 --prj VryCycle --direction a_b --resize 286 --engine cyclegan --lamb 10 --unpaired
-# CUDA_VISIBLE_DEVICES=1 python train.py --dataset pain -b 16 --prj VryNS4B --direction aregis1_b --resize 286 --engine NS4 --netG attgan
-# CUDA_VISIBLE_DEVICES=0 python train.py --dataset FlyZ -b 16 --prj WpWn286B --direction xyweak%zyweak --resize 286 --engine cyclegan --lamb 10
-# CUDA_VISIBLE_DEVICES=1 python train.py --dataset FlyZ -b 16 --prj WpOp256Mask --direction xyweak_xyorisb --resize 256 --engine pix2pixNS
+# CUDA_VISIBLE_DEVICES=2 python train.py --dataset cartilage -b 16 --prj seg_unet --direction badregseg_goodseg --engine pix2pixNS --lamb 10
+# CUDA_VISIBLE_DEVICES=1 python train.py --dataset cartilage -b 16 --prj seg_attgan --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan
+# CUDA_VISIBLE_DEVICES=0 python train.py --dataset cartilage -b 16 --prj seg_attgan_patch4 --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
+# CUDA_VISIBLE_DEVICES=3 python train.py --dataset cartilage -b 16 --prj seg_attgan_patch4_cartonly --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
 
 

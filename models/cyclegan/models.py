@@ -95,12 +95,12 @@ class GeneratorResNet(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_shape, patch):
         super(Discriminator, self).__init__()
-
         channels, height, width = input_shape
 
         # Calculate output shape of image discriminator (PatchGAN)
         # this means no shit
         self.output_shape = (1, height // int(patch), width // int(patch))
+        self.patch = patch
 
         def discriminator_block(in_filters, out_filters, normalize=True):
             """Returns downsampling layers of each discriminator block"""
@@ -110,17 +110,38 @@ class Discriminator(nn.Module):
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
 
-        self.model = nn.Sequential(
-            *discriminator_block(channels, 64, normalize=False),
-            *discriminator_block(64, 128),
-            *discriminator_block(128, 256),
-            *discriminator_block(256, 512),
-            nn.ZeroPad2d((1, 0, 1, 0)),
-            nn.Conv2d(512, 1, 4, padding=1)
-        )
+        layers = [*discriminator_block(channels, 64, normalize=False),
+                  *discriminator_block(64, 128),]
+        if self.patch in [1, 2, 4, 8]:
+            layers += [*discriminator_block(128, 128),]
+        layers += [*discriminator_block(128, 256),]
+        if self.patch in [1, 2, 4]:
+            layers += [*discriminator_block(256, 256),]
+        if self.patch in [1, 2]:
+            layers += [*discriminator_block(256, 256),]
+        layers += [*discriminator_block(256, 512)]
+        if self.patch in [1]:
+            layers += [*discriminator_block(512, 512)]
+        layers += [nn.ZeroPad2d((1, 0, 1, 0)),
+                   nn.Conv2d(512, 1, 4, padding=1)]
+
+        self.model = nn.Sequential(*layers)
+
+        if 0:
+            self.model = nn.Sequential(
+                *discriminator_block(channels, 64, normalize=False),
+                *discriminator_block(64, 128),
+                *discriminator_block(128, 256),
+                *discriminator_block(256, 512),
+                nn.ZeroPad2d((1, 0, 1, 0)),
+                nn.Conv2d(512, 1, 4, padding=1)
+            )
 
     def forward(self, img):
         out = self.model(img)
         return out,
 
 
+if __name__ == '__main__':
+    input_img = torch.rand((3,256,256))
+    print(Discriminator(input_img.shape,patch=8))

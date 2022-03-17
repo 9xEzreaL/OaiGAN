@@ -12,6 +12,7 @@ __pycache__/
 dataset/
 logs/
 logs2/
+outputs/
 outputs/results/
 outputs/XXX/
 result/
@@ -33,6 +34,8 @@ temp/
 *.egg-info/
 .installed.cfg
 *.egg
+data_multi.py
+testgetslice.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

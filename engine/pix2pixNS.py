@@ -20,7 +20,6 @@ class GAN(BaseModel):
             self.imgX0 = self.net_g(self.oriX, a=torch.zeros(self.oriX.shape[0], self.net_g_inc).cuda())[0]
         except:
             self.imgX0 = self.net_g(self.oriX)[0]
-
     def backward_g(self, inputs):
         # ADV(X0, Y)+
         loss_g = 0

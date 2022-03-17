@@ -51,16 +51,14 @@ class Pix2PixModel:
 
         #self.magic256 = torch.load('/media/ExtHDD01/checkpoints/FlyZ_WpOp/netG_model_epoch_170.pth').cuda()
         #self.magic286 = torch.load('/media/ExtHDD01/checkpoints/FlyZ_WpOp/netG_model_epoch_170.pth').cuda()
-        self.magic286 = torch.load('/media/ExtHDD01/checkpointsold/FlyZ_WpOp286Mask/netG_model_epoch_10.pth').cuda()
+        # self.magic286 = torch.load('/media/ExtHDD01/checkpointsold/FlyZ_WpOp286Mask/netG_model_epoch_10.pth').cuda()
 
         self.device = torch.device("cuda:0")
 
     def get_model(self,  epoch, eval=False):
         #model_path = self.dir_checkpoints + "{}/{}_model_epoch_{}.pth".format(args.prj, self.args.netg, epoch)
-
         model_path = os.path.join(self.dir_checkpoints, self.args.dataset, self.args.prj) + \
                ('/' + self.args.netg + '_model_epoch_{}.pth').format(epoch)
-
         net = torch.load(model_path).to(self.device)
         if eval:
             net.eval()

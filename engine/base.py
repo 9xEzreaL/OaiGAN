@@ -78,7 +78,7 @@ class BaseModel(pl.LightningModule):
             from models.AttGAN.attgan import Generator
             print('use attgan discriminator')
             self.net_g = Generator(enc_dim=self.hparams.ngf, dec_dim=self.hparams.ngf,
-                                   n_attrs=self.hparams.n_attrs, img_size=256)
+                                   n_attrs=self.hparams.n_attrs, img_size=256, input_nc=self.hparams.input_nc, output_nc=self.hparams.output_nc)
             self.net_g_inc = 1
         elif self.hparams.netG == 'myattgan':
             from models.AttGAN.attgan import Generator
@@ -94,18 +94,24 @@ class BaseModel(pl.LightningModule):
         else:
             self.net_g = define_G(input_nc=self.hparams.input_nc, output_nc=self.hparams.output_nc,
                                   ngf=self.hparams.ngf, netG=self.hparams.netG,
-                                  norm='batch', use_dropout=self.hparams.mc, init_type='normal', init_gain=0.02, gpu_ids=[])
+                                  norm='none', use_dropout=self.hparams.mc, init_type='normal', init_gain=0.02, gpu_ids=[])
             self.net_g_inc = 0
 
         # DISCRIMINATOR
+        if self.hparams.cartonly:
+            self.hparams.input_nc = 3
         # Patchgan from cyclegan (pix2pix one is strange)
         if (self.hparams.netD).startswith('patchgan'):
             from models.cyclegan.models import Discriminator
-            self.net_d = Discriminator(input_shape=(6, 256, 256), patch=(self.hparams.netD).split('_')[-1])
+            if self.hparams.cartonly:
+                self.net_d = Discriminator(input_shape=(self.hparams.input_nc * 2, 256, 256), patch=(self.hparams.netD).split('_')[-1])
+            else:
+                self.net_d = Discriminator(input_shape=(self.hparams.input_nc * 2, 256, 256), patch=(self.hparams.netD).split('_')[-1])
+
         elif self.hparams.netD == 'sagan':
             from models.sagan.sagan import Discriminator
             print('use sagan discriminator')
-            self.net_d = Discriminator(image_size=64)
+            self.net_d = Discriminator(image_size=256)
         elif self.hparams.netD == 'acgan':
             from models.acgan import Discriminator
             print('use acgan discriminator')

@@ -103,7 +103,6 @@ class PairedData(data.Dataset):
         self.all_path = list(os.path.join(root, x) for x in path.split('_'))
 
         self.images = sorted([x.split('/')[-1] for x in glob.glob(self.all_path[0] + '/*')])
-
         if self.opt.resize == 0: # if 0 stay original size
             self.resize = np.array(Image.open(join(self.all_path[0], self.images[0]))).shape[1]
         else:
@@ -129,14 +128,15 @@ class PairedData(data.Dataset):
 
     def load_img(self, path):
         x = tiff.imread(path)
-        x = np.array(x).astype(np.float32)
-        x = (x-x.min()) / x.max()
+        # x = Image.open(path) #(DESS: 294>286) (PAIN: 224>286)
+        x = np.array(x).astype(np.float32) # (384,384)
+        x = x.transpose((1,2,0))
 
         if len(x.shape) == 2: # if grayscale
-            x = np.concatenate([np.expand_dims(x, 2)]*3, 2) #(256, 256, 3)
-        elif len(x.shape) == 4: # (1, 5, 256, 256)
+            x = np.concatenate([np.expand_dims(x, 2)]*3, 2)
+        elif len(x.shape) == 4:
             x = x.squeeze(0)
-            x = x.transpose((1,2,0)) # (256, 256, 5)
+            x = x.transpose((1,2,0))
         else:
             print('seems data_multi.py have some problem about image chanel/size, check your image size')
         return x
@@ -151,11 +151,8 @@ class PairedData(data.Dataset):
         outputs = ()
         for k in list(augmented.keys()):
             #outputs = outputs + (augmented[k], )
-            try:
-                outputs = outputs + (transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(augmented[k]), )
-            except:
-                outputs = outputs + (transforms.Normalize((0.5, 0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5, 0.5))(augmented[k]),)
-        return (outputs, self.images[index])
+            outputs = outputs + (transforms.Normalize((0.5, 0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5, 0.5))(augmented[k]), )
+        return outputs
 
 
 def save_segmentation(dataset, destination, filldigit=4):

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from utils.data_utils import norm_01
 from skimage import io
 import torchvision.transforms as transforms
+import tifffile as tiff
 
 load_dotenv('.env')
 
@@ -24,21 +25,21 @@ def overlap_red(x0, y0):
     x[1, y == c] = 0.1 * x[1, y == c]
     x[2, y == c] = 0.1 * x[2, y == c]
 
-    c = 1
-    x[0, y == c] = 0.1 * x[0, y == c]
-    x[2, y == c] = 0.1 * x[2, y == c]
-
-    c = 3
-    x[0, y == c] = 0.1 * x[0, y == c]
-    x[2, y == c] = 0.1 * x[2, y == c]
-
     c = 2
     x[0, y == c] = 0.1 * x[0, y == c]
     x[1, y == c] = 0.1 * x[1, y == c]
 
     c = 4
     x[0, y == c] = 0.1 * x[0, y == c]
-    x[1, y == c] = 0.1 * x[1, y == c]
+    x[2, y == c] = 0.1 * x[2, y == c]
+
+    # c = 2
+    # x[0, y == c] = 0.1 * x[0, y == c]
+    # x[1, y == c] = 0.1 * x[1, y == c]
+    #
+    # c = 4
+    # x[0, y == c] = 0.1 * x[0, y == c]
+    # x[1, y == c] = 0.1 * x[1, y == c]
     return x
 
 
@@ -47,28 +48,32 @@ class Pix2PixModel:
         self.args = args
         self.net_g = None
         self.dir_checkpoints = os.environ.get('LOGS')
-        from dataloader.data_multi import MultiData as Dataset
-
-        self.test_set = Dataset(root=os.environ.get('DATASET') + args.testset,
-                                path=args.direction,
-                                opt=args, mode='test')
+        if self.args.cartonly:
+            from dataloader.data_multi import MultiData as Dataset
+            self.test_set = Dataset(root=os.environ.get('DATASET') + args.testset,
+                                    path=args.direction,
+                                    opt=args, mode='test')
+        else:
+            from dataloader.data_multi import MultiData as Dataset
+            self.test_set = Dataset(root=os.environ.get('DATASET') + args.testset,
+                                    path=args.direction,
+                                    opt=args, mode='test')
 
         os.makedirs(os.path.join("outputs/results", args.dataset, args.prj), exist_ok=True)
 
         #self.seg_model = torch.load(os.environ.get('model_seg')).cuda()
-        self.seg_cartilage = torch.load('submodels/oai_cartilage_384.pth')#model_seg_ZIB.pth')
+        self.seg_cartilage = torch.load('submodels/model_seg256.pth')#model_seg_ZIB.pth')
         #self.seg_cartilage = torch.load('submodels/model_seg_ZIB_res18_256.pth')
-        self.seg_bone = torch.load('submodels/model_seg_ZIB.pth')
+        # self.seg_bone = torch.load('submodels/model_seg_ZIB.pth')
         #self.cartilage = torch.load('submodels/femur_tibia_fc_tc.pth').cuda()
-        self.netg_t2d = torch.load('submodels/tse_dess_unet32.pth')
 
-        self.netg_t2d.eval()
-        self.seg_cartilage.eval()
-        self.seg_bone.eval()
+        # self.netg_t2d.eval()
+
+        # self.seg_bone.eval()
 
         #self.magic256 = torch.load('/media/ExtHDD01/checkpoints/FlyZ_WpOp/netG_model_epoch_170.pth').cuda()
         #self.magic286 = torch.load('/media/ExtHDD01/checkpoints/FlyZ_WpOp/netG_model_epoch_170.pth').cuda()
-        self.magic286 = torch.load('/media/ExtHDD01/checkpointsold/FlyZ_WpOp286Mask/netG_model_epoch_10.pth').cuda()
+        # self.magic286 = torch.load('/media/ExtHDD01/checkpointsold/FlyZ_WpOp286Mask/netG_model_epoch_10.pth').cuda()
 
         self.device = torch.device("cuda:0")
 
@@ -86,16 +91,23 @@ class Pix2PixModel:
     def get_one_output(self, i, xy, alpha=None):
         # inputs
         x = self.test_set.__getitem__(i)
-        oriX = x[0].unsqueeze(0).to(self.device)
-        oriY = x[1].unsqueeze(0).to(self.device)
-
+        if len(x)==4:
+            oriX = x[0].unsqueeze(0).to(self.device) #(b,c,256,256)
+            oriY = x[1].unsqueeze(0).to(self.device)
+            maskX = x[2].unsqueeze(0).to(self.device)
+            maskY = x[3].unsqueeze(0).to(self.device)
+            oriX = torch.cat((oriX,maskY),1)
+        elif len(x)==2:
+            oriX = x[0].unsqueeze(0).to(self.device)
+            oriY = x[1].unsqueeze(0).to(self.device)
+        else:
+            print('Error in data direction number, must be 2 or 4')
         if xy == 'x':
             in_img = oriX
             out_img = oriY
         elif xy == 'y':
             in_img = oriY
             out_img = oriX
-
         alpha = alpha / 100
 
         try:
@@ -108,29 +120,37 @@ class Pix2PixModel:
                 try:
                     output = self.net_g(in_img, alpha * torch.ones(1, 1).cuda())[0]
                 except:
-                    output = self.net_g(in_img)[0]
+                    output = self.net_g(in_img)[0] # (1,5,256,256)3
 
-        in_img = in_img.detach().cpu()[0, ::]
+        if in_img.shape[1] in [5]:
+            in_img = squ_channel(in_img)
+            out_img = squ_channel(out_img)
+            output = squ_channel(output)
+        elif in_img.shape[1] in [8]:
+            in_img = in_img[:,:3,::]
+        else:
+            in_img = in_img
+        in_img = in_img.detach().cpu()[0,:3,::]
         out_img = out_img.detach().cpu()[0, ::]
         output = output[0, ::].detach().cpu()
-
         return in_img, out_img, output
 
+    # not used
     def get_t2d(self, ori):
         t2d = self.netg_t2d(ori.cuda().unsqueeze(0))[0][0, ::].detach().cpu()
         return t2d
 
     def get_seg(self, ori):
-        bone = self.seg_bone(ori.cuda().unsqueeze(0))
-        bone = torch.argmax(bone, 1)[0,::].detach().cpu()
-
+        # bone = self.seg_bone(ori.cuda().unsqueeze(0))
+        # bone = torch.argmax(bone, 1)[0,::].detach().cpu()
+        self.seg_cartilage.eval()
         cartilage = self.seg_cartilage(ori.cuda().unsqueeze(0))
         cartilage = torch.argmax(cartilage, 1)[0,::].detach().cpu()
 
         #seg[seg == 3] = 0
         #seg[seg == 4] = 0
 
-        seg = 1 * bone
+        # seg = 1 * bone
 
         #cartilage = self.cartilage(norm_01(ori).cuda().unsqueeze(0))
         #cartilage = torch.argmax(cartilage, 1)[0,::].detach().cpu()
@@ -149,6 +169,13 @@ class Pix2PixModel:
         list_seg = list(map(lambda k: list(map(lambda v: self.get_seg(v), k)), input))
         #list_seg = list(map(lambda k: list(map(lambda v: self.get_magic(v), k)), input))
         return list_seg
+
+# squ_ch
+def squ_channel(input):
+    _, output = torch.max(input, 1)
+    output = torch.unsqueeze(output.type(torch.float32), 1)
+    output = torch.cat([output] * 3, 1)
+    return output
 
 
 def to_print(to_show, save_name):
@@ -174,7 +201,7 @@ parser.add_argument('--direction', type=str, help='a2b or b2a')
 parser.add_argument('--unpaired', action='store_true', dest='unpaired', default=False)
 parser.add_argument('--netg', type=str)
 parser.add_argument('--resize', type=int)
-parser.add_argument('--cropsize', type=int)
+parser.add_argument('--cropsize', default=256, type=int, help='size for cropping, 0 for no crop')
 parser.add_argument('--t2d', action='store_true', dest='t2d', default=False)
 parser.add_argument('--flip', action='store_true', dest='flip')
 parser.add_argument('--eval', action='store_true', dest='eval')
@@ -182,6 +209,7 @@ parser.add_argument('--nepochs', default=(190, 200, 10), nargs='+', help='which 
 parser.add_argument('--nalpha', default=(0, 100, 1), nargs='+', help='range of additional input parameter for generator', type=int)
 parser.add_argument('--mode', type=str, default='dummy')
 parser.add_argument('--port', type=str, default='dummy')
+parser.add_argument('--cart', action='store_true', dest='cartonly')
 
 with open('outputs/' + parser.parse_args().jsn + '.json', 'rt') as f:
     t_args = argparse.Namespace()
@@ -221,34 +249,32 @@ for epoch in range(*args.nepochs):
                 #a[:, seg_use == 4] = 0
                 x_seg.append(a)
 
-            diff_seg = []
-            for n in range(len(diff_xy)):
-                seg_use = seg_xy[2][n]
-                a = 1 * diff_xy[n]
-                a[a < 0] = 0
-                a[:, seg_use == 0] = 0
-                a[:, seg_use == 2] = 0
-                a[:, seg_use == 4] = 0
-                diff_seg.append(a)
-
+            # diff_seg = []
+            # for n in range(len(diff_xy)):
+            #     seg_use = seg_xy[2][n]
+            #     a = 1 * diff_xy[n]
+            #     a[a < 0] = 0
+            #     a[:, seg_use == 0] = 0
+            #     a[:, seg_use == 2] = 0
+            #     a[:, seg_use == 4] = 0
+            #     diff_seg.append(a)
             to_show = [out_xy[0],
-                       #seg_xy[0],
-                       list(map(lambda x, y: overlap_red(x, y), out_xy[0], seg_xy[0])),
-                       #out_xy[1],
-                       #seg_xy[1],
-                       list(map(lambda x, y: overlap_red(x, y), out_xy[1], seg_xy[1])),
+                       # list(map(lambda x, y: overlap_red(x, y), out_xy[0], seg_xy[0])),
+                       out_xy[1],
+                       # seg_xy[1],
+                       # list(map(lambda x, y: overlap_red(x, y), out_xy[1], seg_xy[1])),
                        out_xy[2],
-                       #seg_xy[2]
+                       # seg_xy[2],
                        #diff_xy,
                        #x_seg,
-                       diff_seg,
-                       list(map(lambda x, y: overlap_red(x, y), diff_xy, seg_xy[2])),
+                       # diff_seg,
+                       # list(map(lambda x, y: overlap_red(x, y), out_xy[2], seg_xy[2])),
                        ]
 
             to_print(to_show, save_name=os.path.join("outputs/results", args.dataset, args.prj,
                                                      str(epoch) + '_' + str(alpha) + '_' + str(ii).zfill(4) + '.jpg'))
-    #except:
-    #    print('failed for some reason')
+        #except:
+        #    print('failed for some reason')
 
 
 # USAGE
