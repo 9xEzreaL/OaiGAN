@@ -13,13 +13,13 @@ dataset/
 logs/
 logs2/
 outputs/
-outputs/*
+outputs/cartilagebad.json
 outputs/results/*
 outputs/XXX/
 result/
 Untitled/
 notinuse/
-submodels/*
+submodels/*pth
 build/
 develop-eggs/
 dist/
