@@ -61,8 +61,9 @@ class Pix2PixModel:
 
         os.makedirs(os.path.join("outputs/results", args.dataset, args.prj), exist_ok=True)
 
-        #self.seg_model = torch.load(os.environ.get('model_seg')).cuda()
+        # self.seg_cartilage = torch.load('submodels/model_seg.pth')
         self.seg_cartilage = torch.load('submodels/model_seg256.pth')#model_seg_ZIB.pth')
+        # self.seg_cartilage = torch.load('submodels/SegScale.pth')
         #self.seg_cartilage = torch.load('submodels/model_seg_ZIB_res18_256.pth')
         # self.seg_bone = torch.load('submodels/model_seg_ZIB.pth')
         #self.cartilage = torch.load('submodels/femur_tibia_fc_tc.pth').cuda()
@@ -91,15 +92,15 @@ class Pix2PixModel:
     def get_one_output(self, i, xy, alpha=None):
         # inputs
         x = self.test_set.__getitem__(i)
-        if len(x)==4:
-            oriX = x[0].unsqueeze(0).to(self.device) #(b,c,256,256)
-            oriY = x[1].unsqueeze(0).to(self.device)
-            maskX = x[2].unsqueeze(0).to(self.device)
-            maskY = x[3].unsqueeze(0).to(self.device)
+        if len(x[0])==4:
+            oriX = x[0][0].unsqueeze(0).to(self.device) #(b,c,256,256)
+            oriY = x[0][1].unsqueeze(0).to(self.device)
+            maskX = x[0][2].unsqueeze(0).to(self.device)
+            maskY = x[0][3].unsqueeze(0).to(self.device)
             oriX = torch.cat((oriX,maskY),1)
-        elif len(x)==2:
-            oriX = x[0].unsqueeze(0).to(self.device)
-            oriY = x[1].unsqueeze(0).to(self.device)
+        elif len(x[0])==2:
+            oriX = x[0][0].unsqueeze(0).to(self.device)
+            oriY = x[0][1].unsqueeze(0).to(self.device)
         else:
             print('Error in data direction number, must be 2 or 4')
         if xy == 'x':
@@ -259,7 +260,7 @@ for epoch in range(*args.nepochs):
             #     a[:, seg_use == 4] = 0
             #     diff_seg.append(a)
             to_show = [out_xy[0],
-                       # list(map(lambda x, y: overlap_red(x, y), out_xy[0], seg_xy[0])),
+                       list(map(lambda x, y: overlap_red(x, y), out_xy[0], seg_xy[0])),
                        out_xy[1],
                        # seg_xy[1],
                        # list(map(lambda x, y: overlap_red(x, y), out_xy[1], seg_xy[1])),
@@ -268,7 +269,7 @@ for epoch in range(*args.nepochs):
                        #diff_xy,
                        #x_seg,
                        # diff_seg,
-                       # list(map(lambda x, y: overlap_red(x, y), out_xy[2], seg_xy[2])),
+                       list(map(lambda x, y: overlap_red(x, y), out_xy[2], seg_xy[2])),
                        ]
 
             to_print(to_show, save_name=os.path.join("outputs/results", args.dataset, args.prj,

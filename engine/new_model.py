@@ -15,39 +15,39 @@ class GAN(BaseModel):
     """
     def __init__(self, hparams, train_loader, test_loader, checkpoints):
         BaseModel.__init__(self, hparams, train_loader, test_loader, checkpoints)
-
+        self.net_dX = self.net_d
+        self.net_dY = copy.deepcopy(self.net_d)
+        # save model names and optimize
+        self.netd_names = {'net_dX': 'netDX', 'net_dY': 'netDY'}
+        # self.netd_names = {'net_dX': 'netDX'}
     @staticmethod
     def add_model_specific_args(parent_parser):
         return parent_parser
 
     def generation(self):
-        self.net_dX = self.net_d
-        self.net_dY = copy.deepcopy(self.net_d)
         self.seg_model = torch.load('submodels/model_seg256.pth')
         self.seg_model.eval()
-        # save model names and optimize
-        self.netd_names = {'net_dX': 'netDX', 'net_dY': 'netDY'}
 
         self.oriX = self.batch[0][0] # bad mri (3,256,256)
         self.oriY = self.batch[0][1] # good mri (3,256,256)
         self.maskX = self.batch[0][2] # bad mask (5,256,256)
         self.maskY = self.batch[0][3] # good mask (5,256,256)
-        self.catXY = torch.cat((self.oriX,self.maskY),1)
+        self.catXY = torch.cat((self.oriX,self.maskX),1)
         try:
             self.imgX0 = self.net_g(self.catXY, a=torch.zeros(self.oriX.shape[0], self.net_g_inc).cuda())[0]
         except:
             self.imgX0 = self.net_g(self.catXY)[0]
-        self.maskX0 = self.seg_model(squ_channel(self.imgX0)) # (5,256,256)
+        self.maskX0 = self.seg_model(self.imgX0) # (5,256,256)
         self.maskX0 = squ_channel(self.maskX0) # (3, 256,256)
         self.maskY0 = squ_channel(self.maskY) # (3,256,256)
 
     def backward_g(self, inputs):
         # ADV(X0, Y)+
         loss_g = 0
-        loss_g = self.add_loss_adv(a=self.imgX0, net_d=self.net_dX, loss=loss_g, coeff=1, truth=True, stacked=False) # 3+3 channel
+        loss_g = self.add_loss_adv(a=self.imgX0, net_d=self.net_dX, loss=loss_g, coeff=0.5, truth=True, stacked=False) # 3+3 channel
 
         # ADV(maskX0, maskY)+
-        loss_g = self.add_loss_adv(a=self.maskX0, b=self.maskY0, net_d=self.net_dY, loss=loss_g, coeff=0.5, truth=True, stacked=True) # 3+3 channel
+        loss_g = self.add_loss_adv(a=self.maskX0, net_d=self.net_dY, loss=loss_g, coeff=0.5, truth=True, stacked=False) # 3+3 channel
 
         # L1(X0, Y)
         loss_g = self.add_loss_L1(a=self.imgX0, b=self.oriY, loss=loss_g, coeff=self.hparams.lamb)
@@ -57,16 +57,16 @@ class GAN(BaseModel):
     def backward_d(self, inputs):
         loss_d = 0
         # ADV(X0)-
-        loss_d = self.add_loss_adv(a=self.imgX0, net_d=self.net_dX, loss=loss_d, coeff=0.25, truth=False, stacked=False)
+        loss_d = self.add_loss_adv(a=self.imgX0, net_d=self.net_dX, loss=loss_d, coeff=0.5, truth=False, stacked=False)
 
         # ADV(Y)+
-        loss_d = self.add_loss_adv(a=self.oriY, net_d=self.net_dX, loss=loss_d, coeff=0.25, truth=True, stacked=False)
+        loss_d = self.add_loss_adv(a=self.oriY, net_d=self.net_dX, loss=loss_d, coeff=0.5, truth=True, stacked=False)
 
         # ADV(maskX0, maskY)+
-        loss_d = self.add_loss_adv(a=self.maskX0, b=self.maskY0, net_d=self.net_dY, loss=loss_d, coeff=0.25, truth=False, stacked=True)
+        loss_d = self.add_loss_adv(a=self.maskX0, net_d=self.net_dY, loss=loss_d, coeff=0.5, truth=False, stacked=False)
 
         # ADV(catXX)-
-        loss_d = self.add_loss_adv(a=self.maskY0, b=self.maskY0, net_d=self.net_dY, loss=loss_d, coeff=0.25, truth=True, stacked=True)
+        loss_d = self.add_loss_adv(a=self.maskY0, net_d=self.net_dY, loss=loss_d, coeff=0.5, truth=True, stacked=False)
         return loss_d
 
 

@@ -131,9 +131,10 @@ class PairedData(data.Dataset):
         x = tiff.imread(path)
         x = np.array(x).astype(np.float32)
         x = (x-x.min()) / x.max()
-
         if len(x.shape) == 2: # if grayscale
             x = np.concatenate([np.expand_dims(x, 2)]*3, 2) #(256, 256, 3)
+        elif len(x.shape) == 3:
+            x = x.transpose((1,2,0))
         elif len(x.shape) == 4: # (1, 5, 256, 256)
             x = x.squeeze(0)
             x = x.transpose((1,2,0)) # (256, 256, 5)
