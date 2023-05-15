@@ -15,11 +15,14 @@ parser.add_argument('--engine', dest='engine', type=str, default='mydcgan', help
 # Data
 parser.add_argument('--dataset', type=str, default='pain')
 parser.add_argument('--bysubject', action='store_true', dest='bysubject', default=False)
+parser.add_argument('--gray', action='store_true', dest='gray', default=False, help='only use 1 channel')
+parser.add_argument('--n01', action='store_true', dest='n01', default=False)
 parser.add_argument('--direction', type=str, default='a_b', help='a2b or b2a')
 parser.add_argument('--flip', action='store_true', dest='flip', default=False, help='image flip left right')
 parser.add_argument('--resize', type=int, default=0, help='size for resizing before cropping, 0 for no resizing')
 parser.add_argument('--cropsize', type=int, default=256, help='size for cropping, 0 for no crop')
-parser.add_argument('--cart', action='store_true', dest='cartonly')
+parser.add_argument('--size_z', type=int, default=64, help='axis-z thickness')
+parser.add_argument('--cart', type=str, default='none', dest='cartonly')
 # Model
 parser.add_argument('--gan_mode', type=str, default='vanilla', help='gan mode')
 parser.add_argument('--netG', type=str, default='unet_128', help='netG model')
@@ -71,22 +74,27 @@ def prepare_log(opt):
 opt = prepare_log(opt)
 
 #  Define Dataset Class
-if opt.cartonly:
-    from dataloader.data_multi import MultiData as Dataset
-    train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
-                        path=opt.direction,
-                        opt=opt, mode='train')
-    opt.input_nc = train_set.__getitem__(0)[0][0].shape[0] + train_set.__getitem__(0)[0][2].shape[0]
-    opt.output_nc = train_set.__getitem__(0)[0][0].shape[0]
+from dataloader.data_multi_new import MultiData as Dataset # OAI_pretrain
+# from dataloader.data_multi_new import MultiData as Dataset
 
+train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
+                    path=opt.direction,
+                    opt=opt, mode='train')
+if opt.cartonly == 'cartonly8':
+    opt.input_nc = train_set.__getitem__(0)[0].shape[0] + train_set.__getitem__(0)[2].shape[0]
+    opt.output_nc = train_set.__getitem__(0)[0].shape[0]
+elif opt.cartonly == 'cartonly6':
+    opt.input_nc = 6
+    opt.output_nc = train_set.__getitem__(0)[0].shape[0]
+elif opt.cartonly == 'cartonly4':
+    opt.input_nc = 4
+    opt.output_nc = train_set.__getitem__(0)[0].shape[0]
+elif opt.cartonly == 'cartonly4SPADE':
+    opt.input_nc = 4
+    opt.output_nc = train_set.__getitem__(0)[0].shape[0]
 else:
-    from dataloader.data_multi import MultiData as Dataset
-    # Load Dataset and DataLoader
-    train_set = Dataset(root=os.environ.get('DATASET') + opt.dataset + '/train/',
-                        path=opt.direction,
-                        opt=opt, mode='train')
-    opt.input_nc = train_set.__getitem__(0)[0][0].shape[0]
-    opt.output_nc = train_set.__getitem__(0)[0][0].shape[0]
+    opt.input_nc = train_set.__getitem__(0)[0].shape[0]
+    opt.output_nc = train_set.__getitem__(0)[0].shape[0]
 
 train_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batch_size, shuffle=True)
 
@@ -106,8 +114,6 @@ trainer.fit(net, train_loader)  #, test_loader)  # test loader not used during t
 
 # Example Usage
 # CUDA_VISIBLE_DEVICES=2 python train.py --dataset cartilage -b 16 --prj seg_unet --direction badregseg_goodseg --engine pix2pixNS --lamb 10
-# CUDA_VISIBLE_DEVICES=1 python train.py --dataset cartilage -b 16 --prj seg_attgan --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan
-# CUDA_VISIBLE_DEVICES=0 python train.py --dataset cartilage -b 16 --prj seg_attgan_patch4 --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
-# CUDA_VISIBLE_DEVICES=3 python train.py --dataset cartilage -b 16 --prj seg_attgan_patch4_cartonly --direction badregseg_goodseg --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
+# CUDA_VISIBLE_DEVICES=3 python train.py --dataset OAI_seg -b 16 --prj seg_attgan_patch4_cartonly --direction badreg_good --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
 
-
+# CUDA_VISIBLE_DEVICES=3 python train.py --dataset OAI_DESS_segmentation/ZIB_3D_gan -b 16 --prj seg_attgan_patch4_cartonly --direction original_mask --engine pix2pixNS --lamb 10 --netG attgan --netD patchgan_4
